@@ -15,9 +15,12 @@ namespace Battleship.Services
             battleshipHub = _battleshipHub;
         }
 
-        public void HandleShoot(ShootDto shoot)
+        public async Task HandleShoot(ShootDto shoot)
         {
             var game = battleshipGameStack[shoot.Game_Id];
+            var hit = false;
+            var isShipDown = false;
+
             if (game == null)
             {
                 return;
@@ -34,10 +37,16 @@ namespace Battleship.Services
                 .SelectMany(ship => ship.ShipPositions) 
                 .FirstOrDefault(p => p.Position.x == shoot.Position.x && p.Position.y == shoot.Position.y);
 
-            
+            if(targetShip != null)
+            {
+                targetShip.Hit = true;
+                hit = true;
 
+                isShipDown = game.Players[enemyId].Ships.Any(ship => ship.ShipPositions.All(p => p.Hit));
+            }
             game.ActivePlayerIndex = enemyId;
-
+            
+            await _battleshipHub.Clients.Group(game.Game_Id).SendAsync("NextRoundModel", CreateNextTurnModel(game.ActivePlayerIndex, game.Game_Id, isShipDown, hit, shoot.Position));
         }
 
         private async void CreateGame((string ConnectionId, StartModel Data) player1, (string ConnectionId, StartModel Data) player2)
@@ -71,15 +80,15 @@ namespace Battleship.Services
             };
         }
 
-        private NextRoundModel CreateNextTurnModel()
+        private NextRoundModel CreateNextTurnModel(int activePlayerIndex, string gameId, bool isShipDown, bool isHit, PositionModel position)
         {
             return new NextRoundModel
             {
-                ActivePlayerIndex = battleshipModel.ActivePlayerIndex,
-                GameId = battleshipModel.Game_Id,
-                isShipDown = false,
-                shootHit = false,
-                ShootPosition = new()
+                ActivePlayerIndex = activePlayerIndex,
+                GameId = gameId,
+                isShipDown = isShipDown,
+                shootHit = isHit,
+                ShootPosition = position
             };
         }
 
